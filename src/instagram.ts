@@ -1,4 +1,4 @@
-import axios, { AxiosRequestConfig } from 'axios'
+import axios, { AxiosRequestConfig, AxiosResponse } from 'axios'
 import qs from 'qs'
 
 //Interface
@@ -41,10 +41,7 @@ export async function instagramGetUrl (url_media : string, config = { retries: 5
             const OUTPUT_DATA = createOutputData(INSTAGRAM_REQUEST)
             resolve(OUTPUT_DATA as InstagramResponse)
         } catch(err : any){
-            let error = {
-                error: err.message
-            }
-            reject(error)
+            reject(err)
         }
     })
 }
@@ -52,10 +49,12 @@ export async function instagramGetUrl (url_media : string, config = { retries: 5
 //Utilities
 async function checkRedirect (url : string){
     let split_url = url.split("/")
-    if(split_url.includes("share")){
+    
+    if (split_url.includes("share")){
         let res = await axios.get(url)
         return res.request.path
     }
+
     return url
 }
 
@@ -112,6 +111,33 @@ function getShortcode(url : string){
     }
 }
 
+async function getCSRFToken(){
+    try {
+        let config : AxiosRequestConfig = {
+            method: 'GET',
+            url: 'https://www.instagram.com/',
+        }
+
+        const token = await new Promise <string>((resolve, reject) => {
+            axios.request(config).then((response: AxiosResponse) => {
+                if (!response.headers['set-cookie']){
+                    reject(new Error('CSRF token not found in response headers.'))
+                } else {
+                    const csrfCookie = response.headers['set-cookie'][0]
+                    const csrfToken = csrfCookie.split(";")[0].replace("csrftoken=", '')
+                    resolve(csrfToken)
+                }
+            }).catch((err) => {
+                reject(err)
+            })
+        })
+
+        return token
+    } catch(err: any) {
+        throw new Error(`Failed to obtain CSRF: ${err.message}`)
+    }
+}
+
 function isSidecar(requestData : any){
     try{
         return requestData["__typename"] == "XDTGraphSidecar"
@@ -123,7 +149,7 @@ function isSidecar(requestData : any){
 async function instagramRequest(shortcode: string, retries: number, delay: number) {
     try{
         const BASE_URL = "https://www.instagram.com/graphql/query"
-        const INSTAGRAM_DOCUMENT_ID = "8845758582119845"
+        const INSTAGRAM_DOCUMENT_ID = "9510064595728286"
         let dataBody = qs.stringify({
             'variables': JSON.stringify({
                 'shortcode': shortcode,
@@ -133,13 +159,16 @@ async function instagramRequest(shortcode: string, retries: number, delay: numbe
             }),
             'doc_id': INSTAGRAM_DOCUMENT_ID 
         });
-    
+
+        const token = await getCSRFToken()
+
         let config : AxiosRequestConfig = {
             method: 'post',
             maxBodyLength: Infinity,
             url: BASE_URL,
-            headers: { 
-                'Content-Type': 'application/x-www-form-urlencoded'
+            headers: {
+                'X-CSRFToken': token,
+                'Content-Type': 'application/x-www-form-urlencoded',
             },
             data : dataBody
         };
