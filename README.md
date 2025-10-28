@@ -42,7 +42,7 @@ console.log(data)
     post_info: {
         owner_username: string,
         owner_fullname: string,
-        owner_profile_pic: "profile_pic_url",
+        owner_profile_pic: string,
         is_verified: boolean,
         is_private: boolean,
         likes: number,
